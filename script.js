@@ -9,7 +9,7 @@ const SOURCES = {
   dwyl: {
     id: "dwyl",
     label: "dwyl words.txt",
-    url: "https://raw.githubusercontent.com/dwyl/english-words/master/words.txt"
+    url: "https://raw.githubusercontent.com/dwyl/english-words/refs/heads/master/words.txt"
   }
 };
 
