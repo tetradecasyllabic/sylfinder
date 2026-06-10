@@ -226,7 +226,10 @@ function renderResults() {
 
     const lengthVal = word.length;
 
-    li.textContent = `${word}   ·   len ${lengthVal}   ·   rare ${rarityDisplay}/10`;
+    li.innerHTML = `
+      <div class="result-word">${word}</div>
+      <div class="result-meta">len ${lengthVal} · rare ${rarityDisplay}/10</div>
+    `;
 
     fragment.appendChild(li);
   });
