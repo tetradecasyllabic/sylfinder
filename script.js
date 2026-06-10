@@ -1,14 +1,32 @@
-// URL of the word list (one word per line)
-const WORDLIST_URL =
-  "https://raw.githubusercontent.com/MagicOctopusUrn/wordListsByLength/refs/heads/master/unsorted.txt";
+// DATA SOURCES
+const SOURCES = {
+  magic: {
+    id: "magic",
+    label: "MagicOctopus (ENABLE-derived)",
+    url:
+      "https://raw.githubusercontent.com/MagicOctopusUrn/wordListsByLength/refs/heads/master/unsorted.txt"
+  },
+  dwyl: {
+    id: "dwyl",
+    label: "dwyl words.txt",
+    url: "https://raw.githubusercontent.com/dwyl/english-words/master/words.txt"
+  }
+};
 
+// Default source: "magic" or "dwyl"
+let currentSourceKey = "magic";
+
+// DOM ELEMENTS
 const searchInput = document.getElementById("searchInput");
 const searchButton = document.getElementById("searchButton");
 const statusText = document.getElementById("statusText");
 const resultsList = document.getElementById("resultsList");
 const resultsCount = document.getElementById("resultsCount");
 const sortButtons = document.querySelectorAll(".sort-button");
+const sourceStatusEl = document.getElementById("sourceStatus");
+const sourceButtons = document.querySelectorAll(".source-button");
 
+// STATE
 let words = [];
 let loaded = false;
 let loadFailed = false;
@@ -18,12 +36,19 @@ let currentMatches = [];
 let currentQuery = "";
 let currentSortMode = "alpha"; // "alpha" | "length" | "rarity"
 
-// These are recomputed each search for the current result set
-let currentLetterFreq = null;   // { letter: fraction }
-let currentLetterWeight = null; // { letter: rarity weight }
+// Extra words you can maintain directly here (not via the UI)
+const EXTRA_WORDS = [
+  // "robloxian",
+  // "photon",
+  // "overwatch",
+];
 
-// Build letter frequency map for a list of words, normalized to 0–1 by count.
-// We only care about a–z, and we ignore everything else. [web:31][web:32][web:35]
+// Per-result-set data
+let currentLetterFreq = null;
+let currentLetterWeight = null;
+let currentRarityScores = null;
+
+// Build letter frequency for a list of words. [web:31][web:32][web:35]
 function buildLetterFrequency(wordsList) {
   const counts = {};
   let total = 0;
@@ -39,9 +64,7 @@ function buildLetterFrequency(wordsList) {
   }
 
   const freq = {};
-  if (total === 0) {
-    return freq;
-  }
+  if (total === 0) return freq;
 
   for (const ch in counts) {
     freq[ch] = counts[ch] / total;
@@ -49,14 +72,11 @@ function buildLetterFrequency(wordsList) {
   return freq;
 }
 
-// Turn frequencies into rarity weights for the current group.
-// rarer letter => higher weight. We invert frequency so low-frequency letters
-// in THIS result set get bigger weights. [web:30]
+// Convert frequencies to rarity weights (rarer => higher). [web:45]
 function buildLetterWeights(freq) {
   const weights = {};
   let maxInv = 0;
 
-  // First compute inverse frequencies and track max
   for (const ch in freq) {
     const f = freq[ch];
     if (f <= 0) continue;
@@ -65,11 +85,9 @@ function buildLetterWeights(freq) {
     if (inv > maxInv) maxInv = inv;
   }
 
-  if (maxInv === 0) {
-    return weights;
-  }
+  if (maxInv === 0) return weights;
 
-  // Normalize to roughly 0–1 so scores don't explode for tiny groups
+  // Normalize to 0–1
   for (const ch in weights) {
     weights[ch] = weights[ch] / maxInv;
   }
@@ -77,10 +95,8 @@ function buildLetterWeights(freq) {
   return weights;
 }
 
-// Rarity score for a word based on group-local weights.
-// If a letter has no weight (didn't appear at all in this group), we treat it
-// as average (0.5) so it doesn't break when filters get very small.
-function rarityScore(word) {
+// Raw rarity score (0–1-ish) for a word using currentLetterWeight.
+function rarityScoreRaw(word) {
   if (!currentLetterWeight) return 0;
 
   let score = 0;
@@ -99,34 +115,79 @@ function rarityScore(word) {
     counted++;
   }
 
-  // Normalize by word length so scores are more comparable
   if (counted === 0) return 0;
   return score / counted;
 }
 
-// Fetch the word list on load
-async function loadWords() {
+// Build 0–10 rarity scores from raw values. [web:39][web:45]
+function buildRarityScores(wordsList) {
+  const rawScores = wordsList.map(w => rarityScoreRaw(w));
+  const min = Math.min(...rawScores);
+  const max = Math.max(...rawScores);
+
+  const scoresMap = new Map();
+
+  if (max === min) {
+    wordsList.forEach(w => scoresMap.set(w, 5));
+    return scoresMap;
+  }
+
+  for (let i = 0; i < wordsList.length; i++) {
+    const raw = rawScores[i];
+    const normalized = (raw - min) / (max - min); // 0–1
+    const scaled = normalized * 10; // 0–10
+    const rounded = Math.round(scaled * 10) / 10;
+    scoresMap.set(wordsList[i], rounded);
+  }
+
+  return scoresMap;
+}
+
+// Fetch words for the current source and merge EXTRA_WORDS. [web:2][web:46][web:49]
+async function loadWordsForCurrentSource() {
+  const source = SOURCES[currentSourceKey];
+
   try {
-    statusText.textContent = "Loading word list…";
-    const res = await fetch(WORDLIST_URL);
+    loaded = false;
+    loadFailed = false;
+    words = [];
+    currentMatches = [];
+    currentLetterFreq = null;
+    currentLetterWeight = null;
+    currentRarityScores = null;
+    renderResults();
+
+    statusText.textContent = `Loading word list from ${source.label}…`;
+
+    const res = await fetch(source.url);
     if (!res.ok) {
       throw new Error(`HTTP ${res.status}`);
     }
+
     const text = await res.text();
-    words = text
+    const fetched = text
       .split(/\r?\n/)
       .map(w => w.trim())
       .filter(Boolean);
 
+    words = fetched.concat(EXTRA_WORDS);
     loaded = true;
-    statusText.textContent = `Loaded ${words.length.toLocaleString()} words. Type a syllable and press Enter.`;
+
+    statusText.textContent = `Loaded ${words.length.toLocaleString()} words from ${source.label}. Type a syllable and press Enter.`;
     statusText.classList.add("ready");
+
+    if (sourceStatusEl) {
+      sourceStatusEl.textContent = `Using source: ${source.label}`;
+    }
   } catch (err) {
     console.error("Failed to load word list:", err);
     loadFailed = true;
     statusText.textContent =
       "Failed to load word list. Refresh the page to try again.";
     statusText.classList.add("error");
+    if (sourceStatusEl) {
+      sourceStatusEl.textContent = "";
+    }
   }
 }
 
@@ -146,7 +207,15 @@ function renderResults() {
   currentMatches.forEach(word => {
     const li = document.createElement("li");
     li.className = "result-item";
-    li.textContent = word;
+
+    const rarity = currentRarityScores?.get(word);
+    const rarityDisplay =
+      typeof rarity === "number" ? rarity.toFixed(1).replace(/\.0$/, "") : "–";
+
+    const lengthVal = word.length;
+
+    li.textContent = `${word}   ·   len ${lengthVal}   ·   rare ${rarityDisplay}/10`;
+
     fragment.appendChild(li);
   });
 
@@ -157,15 +226,19 @@ function applySort() {
   const matchesCopy = currentMatches.slice();
 
   if (currentSortMode === "alpha") {
+    // A–Z ascending
     matchesCopy.sort((a, b) => a.localeCompare(b));
   } else if (currentSortMode === "length") {
-    matchesCopy.sort((a, b) => a.length - b.length || a.localeCompare(b));
+    // Length descending (longest first)
+    matchesCopy.sort((a, b) => b.length - a.length || a.localeCompare(b));
   } else if (currentSortMode === "rarity") {
+    // Rarest first (highest rarity), then longer, then A–Z.
     matchesCopy.sort((a, b) => {
-      const scoreA = rarityScore(a);
-      const scoreB = rarityScore(b);
-      if (scoreB !== scoreA) return scoreB - scoreA; // rarer first
-      return a.length - b.length || a.localeCompare(b);
+      const scoreA = currentRarityScores?.get(a) ?? 0;
+      const scoreB = currentRarityScores?.get(b) ?? 0;
+      if (scoreB !== scoreA) return scoreB - scoreA;
+      if (b.length !== a.length) return b.length - a.length;
+      return a.localeCompare(b);
     });
   }
 
@@ -192,6 +265,7 @@ function search() {
     currentMatches = [];
     currentLetterFreq = null;
     currentLetterWeight = null;
+    currentRarityScores = null;
     renderResults();
     return;
   }
@@ -212,14 +286,15 @@ function search() {
     statusText.textContent = `No words found containing "${query}".`;
     currentLetterFreq = null;
     currentLetterWeight = null;
+    currentRarityScores = null;
   } else {
     statusText.textContent = `Showing first ${matches.length} word${
       matches.length === 1 ? "" : "s"
     } containing "${query}".`;
 
-    // Build per-group frequencies and weights from this match set
     currentLetterFreq = buildLetterFrequency(currentMatches);
     currentLetterWeight = buildLetterWeights(currentLetterFreq);
+    currentRarityScores = buildRarityScores(currentMatches);
   }
 
   statusText.classList.remove("error");
@@ -241,7 +316,26 @@ function handleSortButtonClick(e) {
   }
 }
 
-// Wire up events
+async function switchSource(newKey) {
+  if (!SOURCES[newKey] || newKey === currentSourceKey) return;
+  currentSourceKey = newKey;
+
+  sourceButtons.forEach(b => {
+    const key = b.getAttribute("data-source");
+    if (key === newKey) {
+      b.classList.add("source-button-active");
+    } else {
+      b.classList.remove("source-button-active");
+    }
+  });
+
+  await loadWordsForCurrentSource();
+  if (currentQuery) {
+    search();
+  }
+}
+
+// Event wiring
 searchButton.addEventListener("click", search);
 
 searchInput.addEventListener("keydown", e => {
@@ -254,5 +348,12 @@ sortButtons.forEach(btn => {
   btn.addEventListener("click", handleSortButtonClick);
 });
 
-// Kick off loading
-loadWords();
+sourceButtons.forEach(btn => {
+  btn.addEventListener("click", () => {
+    const key = btn.getAttribute("data-source");
+    switchSource(key);
+  });
+});
+
+// Initial load
+loadWordsForCurrentSource();
