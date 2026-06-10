@@ -164,6 +164,51 @@ body {
   color: var(--text-soft);
 }
 
+/* Sort row */
+
+.sort-row {
+  margin-top: 10px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--text-soft);
+}
+
+.sort-label {
+  flex-shrink: 0;
+}
+
+.sort-buttons {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.sort-button {
+  border-radius: 999px;
+  border: 1px solid var(--border-subtle);
+  background: rgba(18, 19, 40, 0.95);
+  color: var(--text-muted);
+  font-size: 0.8rem;
+  padding: 4px 10px;
+  cursor: pointer;
+  transition: background var(--transition-fast), border-color var(--transition-fast),
+    color var(--transition-fast), transform var(--transition-fast),
+    box-shadow var(--transition-fast);
+}
+
+.sort-button:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 14px rgba(0, 0, 0, 0.7);
+}
+
+.sort-button-active {
+  border-color: var(--accent);
+  background: radial-gradient(circle at top left, #434f9c, #252b63);
+  color: #f9f9ff;
+}
+
 /* Results */
 
 .results-section {
