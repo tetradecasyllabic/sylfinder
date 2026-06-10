@@ -31,8 +31,9 @@ let words = [];
 let loaded = false;
 let loadFailed = false;
 
-const MAX_RESULTS = 500000;
-let currentMatches = [];
+const MAX_RESULTS = 5000; // global cap for displayed results
+let currentMatches = [];  // filtered+sorted list actually rendered
+let baseMatches = [];     // full set of matches for current query (before per-mode sampling)
 let currentQuery = "";
 let currentSortMode = "alpha"; // "alpha" | "length" | "rarity"
 
@@ -43,7 +44,7 @@ const EXTRA_WORDS = [
   // "overwatch",
 ];
 
-// Per-result-set data
+// Per-result-set data (computed from baseMatches)
 let currentLetterFreq = null;
 let currentLetterWeight = null;
 let currentRarityScores = null;
@@ -119,7 +120,7 @@ function rarityScoreRaw(word) {
   return score / counted;
 }
 
-// Build 0–10 rarity scores from raw values. [web:39][web:45]
+// Build 0–10 rarity scores from raw values within THIS result set. [web:102][web:105][web:108]
 function buildRarityScores(wordsList) {
   const rawScores = wordsList.map(w => rarityScoreRaw(w));
   const min = Math.min(...rawScores);
@@ -145,7 +146,6 @@ function buildRarityScores(wordsList) {
 
 // Helper: filter dwyl entries to lowercase-only, no punctuation. [web:46][web:69][web:72]
 function filterDwylWords(list) {
-  // keep only words that are all lowercase letters a–z
   const regex = /^[a-z]+$/;
   return list.filter(w => regex.test(w));
 }
@@ -158,6 +158,7 @@ async function loadWordsForCurrentSource() {
     loaded = false;
     loadFailed = false;
     words = [];
+    baseMatches = [];
     currentMatches = [];
     currentLetterFreq = null;
     currentLetterWeight = null;
@@ -177,7 +178,6 @@ async function loadWordsForCurrentSource() {
       .map(w => w.trim())
       .filter(Boolean);
 
-    // If using dwyl, drop any words with periods, uppercase, or other symbols
     if (source.id === "dwyl") {
       fetched = filterDwylWords(fetched);
     }
@@ -237,27 +237,111 @@ function renderResults() {
   resultsList.appendChild(fragment);
 }
 
-function applySort() {
-  const matchesCopy = currentMatches.slice();
+// --- Sampling strategies per sort mode ---
 
-  if (currentSortMode === "alpha") {
-    // A–Z ascending
-    matchesCopy.sort((a, b) => a.localeCompare(b));
-  } else if (currentSortMode === "length") {
-    // Length descending (longest first)
-    matchesCopy.sort((a, b) => b.length - a.length || a.localeCompare(b));
-  } else if (currentSortMode === "rarity") {
-    // Rarest first (highest rarity), then longer, then A–Z.
-    matchesCopy.sort((a, b) => {
-      const scoreA = currentRarityScores?.get(a) ?? 0;
-      const scoreB = currentRarityScores?.get(b) ?? 0;
-      if (scoreB !== scoreA) return scoreB - scoreA;
-      if (b.length !== a.length) return b.length - a.length;
-      return a.localeCompare(b);
-    });
+// Alphabetic: distribute up to MAX_RESULTS across first letters roughly evenly.
+function buildAlphaSample(wordsList) {
+  const buckets = new Map();
+
+  for (const w of wordsList) {
+    const ch = w[0]?.toLowerCase();
+    const key = ch && ch >= "a" && ch <= "z" ? ch : "#";
+    if (!buckets.has(key)) buckets.set(key, []);
+    buckets.get(key).push(w);
   }
 
-  currentMatches = matchesCopy;
+  // Sort each bucket alphabetically
+  for (const bucket of buckets.values()) {
+    bucket.sort((a, b) => a.localeCompare(b));
+  }
+
+  const letters = Array.from(buckets.keys()).sort((a, b) => {
+    if (a === "#") return 1;
+    if (b === "#") return -1;
+    return a.localeCompare(b);
+  });
+
+  const total = wordsList.length;
+  const limit = Math.min(MAX_RESULTS, total);
+  const perBucketBase = Math.floor(limit / letters.length) || 1;
+  let remaining = limit;
+
+  const result = [];
+
+  // First pass: equal-ish distribution
+  for (const key of letters) {
+    if (remaining <= 0) break;
+    const bucket = buckets.get(key);
+    const take = Math.min(perBucketBase, bucket.length, remaining);
+    for (let i = 0; i < take; i++) {
+      result.push(bucket[i]);
+    }
+    remaining -= take;
+  }
+
+  if (remaining <= 0) {
+    return result;
+  }
+
+  // Second pass: fill remaining slots by cycling buckets
+  let idx = 0;
+  while (remaining > 0) {
+    const key = letters[idx % letters.length];
+    const bucket = buckets.get(key);
+    const alreadyTaken = result.filter(w => (w[0]?.toLowerCase() || "#") === key)
+      .length;
+
+    if (alreadyTaken < bucket.length) {
+      result.push(bucket[alreadyTaken]);
+      remaining--;
+    }
+
+    idx++;
+    if (idx > letters.length * 10 && remaining > 0) break;
+  }
+
+  return result;
+}
+
+// Length: just sort by length desc and take first MAX_RESULTS. [web:103][web:106]
+function buildLengthSample(wordsList) {
+  const sorted = wordsList.slice().sort((a, b) => {
+    const lenDiff = b.length - a.length;
+    if (lenDiff !== 0) return lenDiff;
+    return a.localeCompare(b);
+  });
+
+  return sorted.slice(0, MAX_RESULTS);
+}
+
+// Rarity: sort by rarity desc, no distribution cap per score.
+function buildRaritySample(wordsList) {
+  const sorted = wordsList.slice().sort((a, b) => {
+    const scoreA = currentRarityScores?.get(a) ?? 0;
+    const scoreB = currentRarityScores?.get(b) ?? 0;
+    if (scoreB !== scoreA) return scoreB - scoreA;
+    const lenDiff = b.length - a.length;
+    if (lenDiff !== 0) return lenDiff;
+    return a.localeCompare(b);
+  });
+
+  return sorted.slice(0, MAX_RESULTS);
+}
+
+function applySort() {
+  let sample = [];
+
+  if (currentSortMode === "alpha") {
+    // Sample with bucketed distribution by first letter, then sort the sample A–Z
+    const rawSample = buildAlphaSample(baseMatches);
+    sample = rawSample.sort((a, b) => a.localeCompare(b));
+  } else if (currentSortMode === "length") {
+    sample = buildLengthSample(baseMatches);
+  } else if (currentSortMode === "rarity") {
+    sample = buildRaritySample(baseMatches);
+  }
+
+  currentMatches = sample;
   renderResults();
 }
 
@@ -277,6 +361,7 @@ function search() {
   if (!query) {
     statusText.textContent = "Enter a syllable to search.";
     statusText.classList.remove("error");
+    baseMatches = [];
     currentMatches = [];
     currentLetterFreq = null;
     currentLetterWeight = null;
@@ -285,31 +370,31 @@ function search() {
     return;
   }
 
+  // Collect ALL matches for this query (no MAX_RESULTS cap here)
   const matches = [];
-
   for (let i = 0; i < words.length; i++) {
     const w = words[i];
     if (w.toLowerCase().includes(query)) {
       matches.push(w);
-      if (matches.length >= MAX_RESULTS) break;
     }
   }
 
-  currentMatches = matches;
+  baseMatches = matches;
 
   if (matches.length === 0) {
     statusText.textContent = `No words found containing "${query}".`;
     currentLetterFreq = null;
     currentLetterWeight = null;
     currentRarityScores = null;
+    currentMatches = [];
   } else {
-    statusText.textContent = `Showing first ${matches.length} word${
-      matches.length === 1 ? "" : "s"
-    } containing "${query}".`;
+    const used = Math.min(matches.length, MAX_RESULTS);
+    statusText.textContent = `Found ${matches.length} words containing "${query}". Showing up to ${used} based on sort mode.`;
 
-    currentLetterFreq = buildLetterFrequency(currentMatches);
+    // Build rarity stats from the full match set, then we sample. [web:102][web:105]
+    currentLetterFreq = buildLetterFrequency(baseMatches);
     currentLetterWeight = buildLetterWeights(currentLetterFreq);
-    currentRarityScores = buildRarityScores(currentMatches);
+    currentRarityScores = buildRarityScores(baseMatches);
   }
 
   statusText.classList.remove("error");
@@ -326,7 +411,7 @@ function handleSortButtonClick(e) {
   sortButtons.forEach(b => b.classList.remove("sort-button-active"));
   btn.classList.add("sort-button-active");
 
-  if (currentMatches.length > 0) {
+  if (baseMatches.length > 0) {
     applySort();
   }
 }
