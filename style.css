@@ -305,31 +305,32 @@ body {
   gap: 8px;
 }
 
-/* Multi-line, expanding pill items */
+/* Multi-line, expanding card items */
 .result-item {
   background: linear-gradient(
     145deg,
     rgba(21, 24, 52, 0.95),
     rgba(12, 14, 30, 0.95)
   );
-  border-radius: 999px;
+  border-radius: 14px;
   border: 1px solid rgba(86, 102, 184, 0.7);
-  padding: 6px 12px;
+  padding: 8px 10px;
   font-size: 0.82rem;
   color: var(--text-main);
   display: flex;
-  align-items: center;
+  flex-direction: column;
+  align-items: flex-start;
   justify-content: center;
   text-transform: none;
   letter-spacing: 0.01em;
   box-shadow: 0 10px 20px rgba(5, 7, 28, 0.9);
   transition: transform var(--transition-fast), box-shadow var(--transition-fast),
     border-color var(--transition-fast), background var(--transition-fast);
-  text-align: center;
+  text-align: left;
   white-space: normal;
   overflow: visible;
   text-overflow: clip;
-  line-height: 1.25;
+  line-height: 1.3;
 }
 
 .result-item:hover {
@@ -341,6 +342,17 @@ body {
     rgba(44, 59, 132, 0.9),
     rgba(16, 19, 45, 0.95)
   );
+}
+
+.result-word {
+  font-weight: 500;
+  margin-bottom: 2px;
+  word-break: break-word; /* wrap very long words */
+}
+
+.result-meta {
+  font-size: 0.75rem;
+  color: var(--text-soft);
 }
 
 /* Footer */
