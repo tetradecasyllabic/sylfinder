@@ -143,7 +143,14 @@ function buildRarityScores(wordsList) {
   return scoresMap;
 }
 
-// Fetch words for the current source and merge EXTRA_WORDS. [web:2][web:46][web:49]
+// Helper: filter dwyl entries to lowercase-only, no punctuation. [web:46][web:69][web:72]
+function filterDwylWords(list) {
+  // keep only words that are all lowercase letters a–z
+  const regex = /^[a-z]+$/;
+  return list.filter(w => regex.test(w));
+}
+
+// Fetch words for the current source and merge EXTRA_WORDS. [web:2][web:46][web:67]
 async function loadWordsForCurrentSource() {
   const source = SOURCES[currentSourceKey];
 
@@ -165,10 +172,15 @@ async function loadWordsForCurrentSource() {
     }
 
     const text = await res.text();
-    const fetched = text
+    let fetched = text
       .split(/\r?\n/)
       .map(w => w.trim())
       .filter(Boolean);
+
+    // If using dwyl, drop any words with periods, uppercase, or other symbols
+    if (source.id === "dwyl") {
+      fetched = filterDwylWords(fetched);
+    }
 
     words = fetched.concat(EXTRA_WORDS);
     loaded = true;
