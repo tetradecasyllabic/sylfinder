@@ -31,7 +31,7 @@ let words = [];
 let loaded = false;
 let loadFailed = false;
 
-const MAX_RESULTS = 50;
+const MAX_RESULTS = 500000;
 let currentMatches = [];
 let currentQuery = "";
 let currentSortMode = "alpha"; // "alpha" | "length" | "rarity"
