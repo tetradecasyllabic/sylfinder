@@ -17,6 +17,18 @@
 
     <main class="main">
       <section class="search-section">
+        <div class="source-row">
+          <span class="source-label">Source:</span>
+          <div class="source-buttons">
+            <button class="source-button source-button-active" data-source="magic">
+              MagicOctopus
+            </button>
+            <button class="source-button" data-source="dwyl">
+              dwyl words.txt
+            </button>
+          </div>
+        </div>
+
         <div class="search-bar">
           <input
             id="searchInput"
@@ -26,7 +38,9 @@
           />
           <button id="searchButton">Search</button>
         </div>
+
         <p class="status" id="statusText">Loading word list…</p>
+        <p class="status" id="sourceStatus"></p>
 
         <div class="sort-row">
           <span class="sort-label">Sort by:</span>
@@ -35,10 +49,10 @@
               A → Z
             </button>
             <button class="sort-button" data-sort="length">
-              Length
+              Length ↓
             </button>
             <button class="sort-button" data-sort="rarity">
-              Rarity
+              Rarity ↓
             </button>
           </div>
         </div>
@@ -55,9 +69,13 @@
 
     <footer class="footer">
       <span>
-        Word list from
+        Sources:
         <a href="https://github.com/MagicOctopusUrn/wordListsByLength" target="_blank" rel="noopener">
-          ENABLE-based dictionary
+          MagicOctopus
+        </a>
+        &
+        <a href="https://github.com/dwyl/english-words" target="_blank" rel="noopener">
+          dwyl english-words
         </a>.
       </span>
     </footer>
