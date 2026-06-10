@@ -292,6 +292,7 @@ body {
   color: var(--text-soft);
 }
 
+/* Auto-expanding, wider grid for long words */
 .results-list {
   list-style: none;
   margin: 0;
@@ -299,10 +300,12 @@ body {
   max-height: 360px;
   overflow: auto;
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
-  gap: 6px;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  grid-auto-rows: auto;
+  gap: 8px;
 }
 
+/* Multi-line, expanding pill items */
 .result-item {
   background: linear-gradient(
     145deg,
@@ -311,7 +314,7 @@ body {
   );
   border-radius: 999px;
   border: 1px solid rgba(86, 102, 184, 0.7);
-  padding: 6px 10px;
+  padding: 6px 12px;
   font-size: 0.82rem;
   color: var(--text-main);
   display: flex;
@@ -323,9 +326,10 @@ body {
   transition: transform var(--transition-fast), box-shadow var(--transition-fast),
     border-color var(--transition-fast), background var(--transition-fast);
   text-align: center;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
+  white-space: normal;
+  overflow: visible;
+  text-overflow: clip;
+  line-height: 1.25;
 }
 
 .result-item:hover {
@@ -392,6 +396,6 @@ body {
   }
 
   .results-list {
-    grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
   }
 }
