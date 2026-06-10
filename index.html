@@ -1,0 +1,53 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Syllable Word Finder</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <div class="app">
+    <header class="header">
+      <h1 class="title">Syllable Word Finder</h1>
+      <p class="subtitle">
+        Type any syllable (like <span class="example">ao</span>) to find words containing it.
+      </p>
+    </header>
+
+    <main class="main">
+      <section class="search-section">
+        <div class="search-bar">
+          <input
+            id="searchInput"
+            type="text"
+            placeholder="Enter syllable, e.g. ao"
+            autocomplete="off"
+          />
+          <button id="searchButton">Search</button>
+        </div>
+        <p class="status" id="statusText">Loading word list…</p>
+      </section>
+
+      <section class="results-section">
+        <div class="results-header">
+          <span id="resultsCount">0 results</span>
+          <span class="results-note">Showing up to 50 words</span>
+        </div>
+        <ul id="resultsList" class="results-list"></ul>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <span>
+        Word list from
+        <a href="https://github.com/MagicOctopusUrn/wordListsByLength" target="_blank" rel="noopener">
+          ENABLE-based dictionary
+        </a>.
+      </span>
+    </footer>
+  </div>
+
+  <script src="script.js"></script>
+</body>
+</html>
